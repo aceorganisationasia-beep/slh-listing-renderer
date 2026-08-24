@@ -1,0 +1,24 @@
+name: Render listing carousel
+on:
+  repository_dispatch:
+    types: [render-listing]
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install Pillow requests
+
+      - name: Run renderer
+        env:
+          JOB_DATA: ${{ toJson(github.event.client_payload) }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: python render.py
