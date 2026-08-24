@@ -17,11 +17,14 @@ BODY_SIZE = 46.5
 CORNER_R = 18
 
 # photo frame boxes  [x0, y0, x1, y1]
+# Frames are inflated 3px beyond the Canva placeholder so the photo covers
+# the anti-aliased fringe left by the original template art. The overlay
+# knockouts are inflated by the same amount, so the two line up exactly.
 FRAMES = {
-    "p1": [[115, 261, 971, 825]],
-    "p2": [[108, 108, 964, 717]],
-    "p3": [[108, 108, 964, 717]],
-    "p4": [[108, 108, 964, 655], [112, 740, 967, 1287]],
+    "p1": [[112, 258, 974, 828]],
+    "p2": [[105, 105, 967, 720]],
+    "p3": [[105, 105, 967, 720]],
+    "p4": [[105, 105, 967, 658], [109, 737, 970, 1290]],
 }
 
 # text positions (baseline y for each line)
