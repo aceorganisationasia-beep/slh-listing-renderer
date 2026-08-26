@@ -9,9 +9,9 @@ CARD = (244, 238, 234)
 INK  = (58, 58, 58)
 RADIUS = 34
 
-HANG  = "nlfonts/Hangyaboly.ttf"
-BRIC  = "nlfonts/fonts/otf/BricolageGrotesque-ExtraBold.otf"
-BRICC = "nlfonts/fonts/otf/BricolageGrotesque48ptCondensed-ExtraBold.otf"
+HANG  = "Hangyaboly.ttf"
+BRIC  = "BricolageGrotesque-ExtraBold.otf"
+BRICC = "BricolageGrotesque48ptCondensed-ExtraBold.otf"
 
 S_TITLE, S_BODY, S_UNIT, S_BR, S_AMEN, S_LOC, S_LOCHEAD = 105, 47, 43, 64, 38, 40, 54
 
