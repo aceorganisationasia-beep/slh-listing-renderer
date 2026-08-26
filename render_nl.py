@@ -9,9 +9,9 @@ CARD = (244, 238, 234)
 INK  = (58, 58, 58)
 RADIUS = 34
 
-HANG  = "nlfonts/Hangyaboly.ttf"
-BRIC  = "nlfonts/fonts/otf/BricolageGrotesque-ExtraBold.otf"
-BRICC = "nlfonts/fonts/otf/BricolageGrotesque48ptCondensed-ExtraBold.otf"
+HANG  = "Hangyaboly.ttf"
+BRIC  = "BricolageGrotesque-ExtraBold.otf"
+BRICC = "BricolageGrotesque48ptCondensed-ExtraBold.otf"
 
 S_TITLE, S_BODY, S_UNIT, S_BR, S_AMEN, S_LOC, S_LOCHEAD = 105, 47, 43, 64, 38, 40, 54
 
@@ -183,7 +183,7 @@ def page_developers(logos, accent):
 # takes the project accent colour, so the base PNG is recoloured in
 # place rather than rebuilt, keeping the phone mockup, WhatsApp badge
 # and CEA line pixel-exact.
-CTA_BASE = "overlays_fixed/listing_p5.png"
+CTA_BASE = "listing_p5.png"
 CTA_HEADLINE = (0, 870, W, 1220)   # region holding the three headline lines
 
 def page_cta(accent, base_path=CTA_BASE):
