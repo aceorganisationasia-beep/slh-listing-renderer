@@ -181,7 +181,7 @@ def page_developers(logos, accent):
 # takes the project accent colour, so the base PNG is recoloured in
 # place rather than rebuilt, keeping the phone mockup, WhatsApp badge
 # and CEA line pixel-exact.
-CTA_BASE = "overlays_fixed/listing_p5.png"
+CTA_BASE = "listing_p5.png"
 CTA_HEADLINE = (0, 870, W, 1220)   # region holding the three headline lines
 
 def page_cta(accent, base_path=CTA_BASE):
