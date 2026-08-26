@@ -1,9 +1,40 @@
 #!/usr/bin/env python3
 """New launch job runner. Receives parsed project data from Apps Script,
 renders the carousel, sends it back to Telegram."""
-import json, os, requests
+import json, os, socket, time, requests
 from io import BytesIO
 from PIL import Image
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# GitHub runners resolve AAAA records but often cannot route IPv6, so a
+# connection to a dual-stack host hangs until it times out. Restricting
+# resolution to IPv4 avoids that entirely.
+_orig_getaddrinfo = socket.getaddrinfo
+def _ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
+    return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+socket.getaddrinfo = _ipv4_only
+
+BROWSER_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
+    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    "Accept-Language": "en-SG,en;q=0.9",
+    "Referer": "https://www.newlaunches.sg/",
+    "Connection": "close",
+}
+
+def _session():
+    s = requests.Session()
+    retry = Retry(total=4, backoff_factor=1.5,
+                  status_forcelist=[429, 500, 502, 503, 504],
+                  allowed_methods=["GET"])
+    s.mount("https://", HTTPAdapter(max_retries=retry))
+    s.mount("http://", HTTPAdapter(max_retries=retry))
+    s.headers.update(BROWSER_HEADERS)
+    return s
+
+SESSION = _session()
 
 from render_nl import (page_cover, page_units, page_amenities, page_location,
                        page_developers, page_cta, accent_from_logo,
@@ -19,9 +50,21 @@ def msg(token, chat, text):
         pass
 
 def get_image(url):
-    r = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
-    r.raise_for_status()
-    return Image.open(BytesIO(r.content))
+    """Fetch an image, retrying on transient failures.
+
+    The photo host is slow to accept connections from CI runners, so
+    each attempt gets a short connect timeout and a generous read
+    timeout, and we try a few times before giving up."""
+    last = None
+    for attempt in range(4):
+        try:
+            r = SESSION.get(url, timeout=(15, 90))
+            r.raise_for_status()
+            return Image.open(BytesIO(r.content))
+        except Exception as e:
+            last = e
+            time.sleep(2 * (attempt + 1))
+    raise RuntimeError(f"Could not download {url.split('/')[-1]} after 4 tries: {last}")
 
 def send_album(token, chat, images):
     files, media = {}, []
@@ -56,14 +99,21 @@ def main():
 
     msg(token, chat, f"Rendering {job.get('project','project')}, about a minute...")
 
-    logo = knockout_background(get_image(job["logo_url"])) if job.get("logo_url") else None
+    def optional(url):
+        if not url: return None
+        try: return knockout_background(get_image(url))
+        except Exception as e:
+            msg(token, chat, f"Note: could not fetch {url.split('/')[-1]}, continuing without it.")
+            return None
+
+    logo = optional(job.get("logo_url"))
     accent = tuple(job["accent"]) if job.get("accent") else (
         accent_from_logo(logo) if logo is not None else DEFAULT_ACCENT)
 
     hero = get_image(job["hero_url"])
     amen = get_image(job["amenity_url"])
     mapi = get_image(job["map_url"])
-    devs = [knockout_background(get_image(u)) for u in job.get("developer_urls", [])]
+    devs = [d for d in (optional(u) for u in job.get("developer_urls", [])) if d is not None]
 
     pages = [page_cover(logo, hero, job["address"], job["tenure"], job["top"])]
     for grp in chunk_units([(g["label"], g["variants"]) for g in job["units"]]):
