@@ -258,5 +258,31 @@ def main():
             p.save(f"page_{i+1}.jpg", quality=96)
         print(f"Saved {len(pages)} pages locally")
 
+def notify_failure(err):
+    """Last-resort reporter. If the render dies, say so in Telegram
+    rather than leaving the job to vanish silently."""
+    try:
+        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        raw = json.loads(os.environ.get("JOB_DATA", "{}"))
+        job = raw.get("job", raw)
+        chat_id = job.get("chat_id")
+        name = job.get("property_name", "your listing")
+        if token and chat_id:
+            send_tg_message(
+                token, chat_id,
+                "RENDER FAILED\n"
+                f"Service: Listing / Rental\n"
+                f"Project: {name}\n\n"
+                f"{type(err).__name__}: {str(err)[:400]}\n\n"
+                "Nothing was sent. Start again with /new."
+            )
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        notify_failure(e)
+        raise
