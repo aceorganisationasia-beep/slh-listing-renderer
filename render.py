@@ -251,12 +251,29 @@ def main():
         for key in ("caption", "caption_cn"):
             if job.get(key):
                 send_tg_message(token, chat_id, job[key])
+        report_done(job, True)
     except Exception as e:
         send_tg_message(token, chat_id, f"Render complete but failed to send: {e}")
         # save locally as fallback
         for i, p in enumerate(pages):
             p.save(f"page_{i+1}.jpg", quality=96)
         print(f"Saved {len(pages)} pages locally")
+
+
+def report_done(job, ok=True):
+    """Tell Apps Script the render finished, so the watchdog does not
+    raise a false alarm on a job that actually succeeded."""
+    url = job.get("callback_url")
+    secret = job.get("callback_secret")
+    if not url or not secret:
+        return
+    try:
+        requests.post(url, json={
+            "slh_done": True, "secret": secret,
+            "chat_id": job.get("chat_id"), "ok": bool(ok)
+        }, timeout=30)
+    except Exception:
+        pass
 
 def notify_failure(err):
     """Last-resort reporter. If the render dies, say so in Telegram
@@ -267,6 +284,7 @@ def notify_failure(err):
         job = raw.get("job", raw)
         chat_id = job.get("chat_id")
         name = job.get("property_name", "your listing")
+        report_done(job, False)
         if token and chat_id:
             send_tg_message(
                 token, chat_id,
