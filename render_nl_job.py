@@ -129,12 +129,30 @@ def main():
     msg(token, chat, f"Done. {len(pages)} pages sent.")
     for cap in ("caption_en", "caption_cn"):
         if job.get(cap): msg(token, chat, job[cap])
+    report_done(job, True)
+
+
+def report_done(job, ok=True):
+    """Tell Apps Script the render finished, so the watchdog does not
+    raise a false alarm on a job that actually succeeded."""
+    url = job.get("callback_url")
+    secret = job.get("callback_secret")
+    if not url or not secret:
+        return
+    try:
+        requests.post(url, json={
+            "slh_done": True, "secret": secret,
+            "chat_id": job.get("chat_id"), "ok": bool(ok)
+        }, timeout=30)
+    except Exception:
+        pass
 
 def notify_failure(err):
     try:
         token = os.environ.get("TELEGRAM_BOT_TOKEN")
         job = json.loads(os.environ.get("JOB_DATA", "{}"))
         job = job.get("job", job)
+        report_done(job, False)
         if token and job.get("chat_id"):
             msg(token, job["chat_id"],
                 "RENDER FAILED\nService: New Launch\n"
