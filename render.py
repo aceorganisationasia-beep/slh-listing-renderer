@@ -248,9 +248,9 @@ def main():
             batch = pages[i : i + 10]
             send_tg_album(token, chat_id, batch)
         send_tg_message(token, chat_id, f"Done. {len(pages)} pages sent.")
-        caption = job.get("caption")
-        if caption:
-            send_tg_message(token, chat_id, caption)
+        for key in ("caption", "caption_cn"):
+            if job.get(key):
+                send_tg_message(token, chat_id, job[key])
     except Exception as e:
         send_tg_message(token, chat_id, f"Render complete but failed to send: {e}")
         # save locally as fallback
