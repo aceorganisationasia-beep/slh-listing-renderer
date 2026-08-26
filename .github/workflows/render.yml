@@ -1,12 +1,12 @@
-name: Render listing carousel
+name: Render carousel
 on:
   repository_dispatch:
-    types: [render-listing]
+    types: [render-listing, render-newlaunch]
 
 jobs:
   render:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -15,10 +15,33 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install Pillow requests
+        run: pip install Pillow pillow-heif requests
 
-      - name: Run renderer
+      - name: Run listing renderer
+        if: github.event.action == 'render-listing'
         env:
           JOB_DATA: ${{ toJson(github.event.client_payload) }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: python render.py
+
+      - name: Run new launch renderer
+        if: github.event.action == 'render-newlaunch'
+        env:
+          JOB_DATA: ${{ toJson(github.event.client_payload) }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: python render_nl_job.py
+
+      # Fires only if something above failed. Python cannot report its
+      # own death, so this is the layer that catches setup failures,
+      # timeouts and hard crashes.
+      - name: Notify on failure
+        if: failure()
+        env:
+          TG: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ github.event.client_payload.job.chat_id }}
+          KIND: ${{ github.event.action }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          MSG="RENDER FAILED%0AService: $KIND%0AThe job did not complete.%0A%0ALogs: $RUN"
+          curl -s -X POST "https://api.telegram.org/bot$TG/sendMessage" \
+            -d "chat_id=$CHAT" -d "text=$MSG" || true
