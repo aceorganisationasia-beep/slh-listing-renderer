@@ -15,7 +15,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install Pillow pillow-heif requests
+        run: pip install Pillow pillow-heif requests numpy
 
       - name: Run listing renderer
         if: github.event.action == 'render-listing'
