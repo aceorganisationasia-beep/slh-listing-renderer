@@ -7,6 +7,12 @@ import json, os, sys, requests, math
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()      # iPhone originals arrive as HEIC
+except Exception:
+    pass
+
 # ── constants ────────────────────────────────────────────────────────
 W, H = 1080, 1350
 BG = (232, 220, 204)

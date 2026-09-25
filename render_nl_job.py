@@ -4,6 +4,12 @@ renders the carousel, sends it back to Telegram."""
 import json, os, socket, time, requests
 from io import BytesIO
 from PIL import Image
+
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()      # iPhone originals arrive as HEIC
+except Exception:
+    pass
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
