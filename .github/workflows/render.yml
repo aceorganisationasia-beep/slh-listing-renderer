@@ -41,7 +41,18 @@ jobs:
           CHAT: ${{ github.event.client_payload.job.chat_id }}
           KIND: ${{ github.event.action }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEADS: ${{ github.event.client_payload.job.preview.on }}
+          SPACER: ${{ github.event.client_payload.job.preview.spacer }}
         run: |
           MSG="RENDER FAILED%0AService: $KIND%0AThe job did not complete.%0A%0ALogs: $RUN"
+          # Chat-list header, same /preview setting as the bot: one plain
+          # line, then a line of invisible blanks (U+2800, sent URL-encoded).
+          if [ "$HEADS" != "false" ]; then
+            case "$KIND" in render-newlaunch) WHAT="New Launch" ;; *) WHAT="Listing / Rental" ;; esac
+            case "$SPACER" in ''|*[!0-9]*) SPACER=56 ;; esac
+            if [ "$SPACER" -lt 8 ] || [ "$SPACER" -gt 120 ]; then SPACER=56; fi
+            BLANKS=$(printf '%%E2%%A0%%80%.0s' $(seq 1 "$SPACER"))
+            MSG="Render failed %C2%B7 $WHAT%0A$BLANKS%0A$MSG"
+          fi
           curl -s -X POST "https://api.telegram.org/bot$TG/sendMessage" \
             -d "chat_id=$CHAT" -d "text=$MSG" || true
