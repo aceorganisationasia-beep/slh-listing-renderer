@@ -44,6 +44,41 @@ P2_DOT_R = 7
 TG_API = "https://api.telegram.org/bot{token}"
 TG_FILE = "https://api.telegram.org/file/bot{token}"
 
+# ── chat-list headers ────────────────────────────────────────────────
+# Every message opens with one plain header line and a line of invisible
+# blanks, so the Telegram chat list only shows the header. The captions
+# are sent clean so they copy straight into Instagram, and the Done
+# message now comes after them, so the last message is always headed.
+# Apps Script passes its /preview setting in the job.
+HEAD_BLANK = "\u2800"
+HEAD_SEP = " \u00b7 "
+HEAD_MAX = 32
+PREVIEW = {"on": True, "spacer": 56}
+
+def use_preview(job):
+    """Adopt the bot's /preview setting carried in the job."""
+    p = (job or {}).get("preview") or {}
+    PREVIEW["on"] = p.get("on") is not False
+    n = p.get("spacer")
+    PREVIEW["spacer"] = n if isinstance(n, int) and 8 <= n <= 120 else 56
+
+def head_with(label, detail=""):
+    """'Label \u00b7 detail', the detail shortened at a word to fit."""
+    detail = " ".join(str(detail or "").split())
+    room = HEAD_MAX - len(label) - len(HEAD_SEP)
+    if len(detail) > room:
+        cut = detail.rfind(" ", 0, room + 1)
+        detail = detail[:cut] if cut > 0 else ""
+    detail = detail.rstrip(" ,:;.-")
+    return f"{label}{HEAD_SEP}{detail}" if detail else label
+
+def with_head(head, text):
+    """Header + blank line + text. Unchanged if headers are off or it won't fit."""
+    if not head or not PREVIEW["on"]:
+        return text
+    out = f"{head[:HEAD_MAX]}\n{HEAD_BLANK * PREVIEW['spacer']}\n{text}"
+    return out if len(out.encode("utf-16-le")) // 2 <= 4096 else text
+
 # ── helpers ──────────────────────────────────────────────────────────
 def font_reg(size=BODY_SIZE):
     return ImageFont.truetype(FONT_REG, int(size))
@@ -125,10 +160,11 @@ def send_tg_album(token, chat_id, images):
     )
     r.raise_for_status()
 
-def send_tg_message(token, chat_id, text):
+def send_tg_message(token, chat_id, text, head=None):
+    """head is the chat-list header. Captions go out without one."""
     requests.post(
         f"{TG_API.format(token=token)}/sendMessage",
-        json={"chat_id": chat_id, "text": text},
+        json={"chat_id": chat_id, "text": with_head(head, text)},
     )
 
 # ── page builders ────────────────────────────────────────────────────
@@ -196,8 +232,10 @@ def main():
     job = raw.get("job", raw)
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat_id = job["chat_id"]
+    use_preview(job)
 
-    send_tg_message(token, chat_id, "Rendering your listing, hang on...")
+    send_tg_message(token, chat_id, "Rendering your listing, hang on...",
+                    head=head_with("Rendering", job.get("property_name")))
 
     tpl_type = job["type"]  # "listing" or "rental"
     photo_ids = job["photo_file_ids"]  # list of telegram file_ids
@@ -208,12 +246,14 @@ def main():
         try:
             photos.append(download_tg_file(token, fid))
         except Exception as e:
-            send_tg_message(token, chat_id, f"Failed to download photo {len(photos)+1}: {e}")
+            send_tg_message(token, chat_id, f"Failed to download photo {len(photos)+1}: {e}",
+                            head=f"Render{HEAD_SEP}photo failed")
             return
 
     n = len(photos)
     if n < 3:
-        send_tg_message(token, chat_id, "Need at least 3 photos. Job cancelled.")
+        send_tg_message(token, chat_id, "Need at least 3 photos. Job cancelled.",
+                        head=f"Render{HEAD_SEP}cancelled")
         return
 
     pages = []
@@ -253,13 +293,17 @@ def main():
         for i in range(0, len(pages), 10):
             batch = pages[i : i + 10]
             send_tg_album(token, chat_id, batch)
-        send_tg_message(token, chat_id, f"Done. {len(pages)} pages sent.")
+        # Captions go out clean, ready to copy. Done comes last, so the
+        # chat list always ends on a header.
         for key in ("caption", "caption_cn"):
             if job.get(key):
                 send_tg_message(token, chat_id, job[key])
+        send_tg_message(token, chat_id, f"Done. {len(pages)} pages sent.",
+                        head=f"Done{HEAD_SEP}{len(pages)} pages")
         report_done(job, True)
     except Exception as e:
-        send_tg_message(token, chat_id, f"Render complete but failed to send: {e}")
+        send_tg_message(token, chat_id, f"Render complete but failed to send: {e}",
+                        head=f"Error{HEAD_SEP}send failed")
         # save locally as fallback
         for i, p in enumerate(pages):
             p.save(f"page_{i+1}.jpg", quality=96)
@@ -290,6 +334,7 @@ def notify_failure(err):
         job = raw.get("job", raw)
         chat_id = job.get("chat_id")
         name = job.get("property_name", "your listing")
+        use_preview(job)
         report_done(job, False)
         if token and chat_id:
             send_tg_message(
@@ -298,7 +343,8 @@ def notify_failure(err):
                 f"Service: Listing / Rental\n"
                 f"Project: {name}\n\n"
                 f"{type(err).__name__}: {str(err)[:400]}\n\n"
-                "Nothing was sent. Start again with /new."
+                "Nothing was sent. Start again with /new.",
+                head=head_with("Render failed", name),
             )
     except Exception:
         pass

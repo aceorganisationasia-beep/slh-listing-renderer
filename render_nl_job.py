@@ -48,10 +48,46 @@ from render_nl import (page_cover, page_units, page_amenities, page_location,
 
 TG = "https://api.telegram.org/bot{t}"
 
-def msg(token, chat, text):
+# ── chat-list headers ────────────────────────────────────────────────
+# Every message opens with one plain header line and a line of invisible
+# blanks, so the Telegram chat list only shows the header. The captions
+# are sent clean so they copy straight into Instagram, and the Done
+# message now comes after them, so the last message is always headed.
+# Apps Script passes its /preview setting in the job.
+HEAD_BLANK = "\u2800"
+HEAD_SEP = " \u00b7 "
+HEAD_MAX = 32
+PREVIEW = {"on": True, "spacer": 56}
+
+def use_preview(job):
+    """Adopt the bot's /preview setting carried in the job."""
+    p = (job or {}).get("preview") or {}
+    PREVIEW["on"] = p.get("on") is not False
+    n = p.get("spacer")
+    PREVIEW["spacer"] = n if isinstance(n, int) and 8 <= n <= 120 else 56
+
+def head_with(label, detail=""):
+    """'Label \u00b7 detail', the detail shortened at a word to fit."""
+    detail = " ".join(str(detail or "").split())
+    room = HEAD_MAX - len(label) - len(HEAD_SEP)
+    if len(detail) > room:
+        cut = detail.rfind(" ", 0, room + 1)
+        detail = detail[:cut] if cut > 0 else ""
+    detail = detail.rstrip(" ,:;.-")
+    return f"{label}{HEAD_SEP}{detail}" if detail else label
+
+def with_head(head, text):
+    """Header + blank line + text. Unchanged if headers are off or it won't fit."""
+    if not head or not PREVIEW["on"]:
+        return text
+    out = f"{head[:HEAD_MAX]}\n{HEAD_BLANK * PREVIEW['spacer']}\n{text}"
+    return out if len(out.encode("utf-16-le")) // 2 <= 4096 else text
+
+def msg(token, chat, text, head=None):
+    """head is the chat-list header. Captions go out without one."""
     try:
         requests.post(f"{TG.format(t=token)}/sendMessage",
-                      json={"chat_id": chat, "text": text}, timeout=30)
+                      json={"chat_id": chat, "text": with_head(head, text)}, timeout=30)
     except Exception:
         pass
 
@@ -102,14 +138,17 @@ def main():
     job = job.get("job", job)
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat = job["chat_id"]
+    use_preview(job)
 
-    msg(token, chat, f"Rendering {job.get('project','project')}, about a minute...")
+    msg(token, chat, f"Rendering {job.get('project','project')}, about a minute...",
+        head=head_with("Rendering", job.get("project", "project")))
 
     def optional(url):
         if not url: return None
         try: return knockout_background(get_image(url))
         except Exception as e:
-            msg(token, chat, f"Note: could not fetch {url.split('/')[-1]}, continuing without it.")
+            msg(token, chat, f"Note: could not fetch {url.split('/')[-1]}, continuing without it.",
+                head=f"Render{HEAD_SEP}image skipped")
             return None
 
     logo = optional(job.get("logo_url"))
@@ -132,9 +171,11 @@ def main():
 
     for i in range(0, len(pages), 10):
         send_album(token, chat, pages[i:i+10])
-    msg(token, chat, f"Done. {len(pages)} pages sent.")
+    # Captions go out clean, ready to copy. Done comes last, so the chat
+    # list always ends on a header.
     for cap in ("caption_en", "caption_cn"):
         if job.get(cap): msg(token, chat, job[cap])
+    msg(token, chat, f"Done. {len(pages)} pages sent.", head=f"Done{HEAD_SEP}{len(pages)} pages")
     report_done(job, True)
 
 
@@ -158,13 +199,15 @@ def notify_failure(err):
         token = os.environ.get("TELEGRAM_BOT_TOKEN")
         job = json.loads(os.environ.get("JOB_DATA", "{}"))
         job = job.get("job", job)
+        use_preview(job)
         report_done(job, False)
         if token and job.get("chat_id"):
             msg(token, job["chat_id"],
                 "RENDER FAILED\nService: New Launch\n"
                 f"Project: {job.get('project','unknown')}\n\n"
                 f"{type(err).__name__}: {str(err)[:400]}\n\n"
-                "Nothing was sent. Start again with New Launch.")
+                "Nothing was sent. Start again with New Launch.",
+                head=head_with("Render failed", job.get("project", "unknown")))
     except Exception:
         pass
 
